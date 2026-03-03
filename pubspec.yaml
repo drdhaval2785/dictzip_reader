@@ -1,0 +1,12 @@
+name: dictzip_reader
+description: A Dart package to read and decompress dictzip (.dict.dz) files with random access support.
+version: 0.1.0
+repository: https://github.com/dhaval/dictzip_reader
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+
+dev_dependencies:
+  lints: ^2.1.0
+  test: ^1.24.0

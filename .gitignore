@@ -1,0 +1,30 @@
+# https://dart.dev/guides/libraries/private-files
+# Created by https://www.toptal.com/developers/gitignore/api/dart
+# Edit at https://www.toptal.com/developers/gitignore?templates=dart
+
+# .packages is deprecated
+.packages
+
+# Files that might contain secrets
+.env
+
+# Dart/Flutter related
+.dart_tool/
+.pub-cache/
+.pub/
+
+# Symbols
+*.sublime-project
+*.sublime-workspace
+
+# Compilation errors
+*.err
+
+# Dependency directories
+packages/
+
+# Build artifacts
+build/
+
+# Test snapshots
+test_assets/*.dict.dz
