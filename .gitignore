@@ -28,3 +28,6 @@ build/
 
 # Test snapshots
 test_assets/*.dict.dz
+
+# DS
+.DS*
