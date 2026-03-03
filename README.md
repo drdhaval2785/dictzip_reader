@@ -27,3 +27,7 @@ void main() async {
 - Supports efficient random access to compressed files.
 - Handles standard gzip files (though without random access optimization if RA header is missing).
 - Low memory footprint by only decompressing necessary chunks.
+
+## Github repository
+
+https://github.com/drdhaval2785/dictzip_reader
