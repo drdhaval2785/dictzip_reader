@@ -15,10 +15,23 @@ void main() async {
     await reader.open();
     print('Header parsed successfully.');
     
-    // Read the first 50 bytes
+    // ── Single Read ──────────────────────────────────────────────────────────
+    print('\nReading first 50 bytes (single):');
     final text = await reader.read(0, 50);
-    print('First 50 bytes: $text');
+    print('Result: $text');
     
+    // ── Bulk Read ────────────────────────────────────────────────────────────
+    print('\nReading multiple ranges in bulk:');
+    final queries = [
+      (0, 14),   // "Hello Dictzip!"
+      (100, 14), // next occurrence
+      (200, 14), // next occurrence
+    ];
+    
+    final results = await reader.readBulk(queries);
+    for (int i = 0; i < results.length; i++) {
+      print('Query $i (offset ${queries[i].$1}): ${results[i]}');
+    }
   } catch (e) {
     print('Error: $e');
   } finally {

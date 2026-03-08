@@ -78,6 +78,118 @@ class DictzipReader {
     return _readBytes(offset, length);
   }
 
+  /// Reads multiple byte ranges in a single pass to minimize I/O and decompression.
+  ///
+  /// Processing is done linearly by sorting queries by offset.
+  /// Takes a list of (offset, length) tuples and returns a list of byte arrays.
+  Future<List<List<int>>> readBulkBytes(List<(int offset, int length)> queries) async {
+    if (!_opened) throw StateError('DictzipReader not opened. Call open() first.');
+    if (queries.isEmpty) return [];
+
+    // Tag queries with original index to preserve output order.
+    final indexedQueries = List.generate(queries.length, (i) {
+      final q = queries[i];
+      return (
+        index: i,
+        offset: q.$1,
+        length: q.$2,
+        firstChunk: q.$1 ~/ _chunkLen,
+        lastChunk: q.$2 <= 0 ? (q.$1 ~/ _chunkLen) : ((q.$1 + q.$2 - 1) ~/ _chunkLen),
+      );
+    });
+
+    // Sort by offset to process chunks linearly.
+    final sortedQueries = List.of(indexedQueries)..sort((a, b) => a.offset.compareTo(b.offset));
+
+    final results = List<List<int>>.filled(queries.length, const []);
+    final activeQueries = <_ActiveQuery>[];
+    int nextQueryIdx = 0;
+
+    // Find the range of chunks we need to visit.
+    int? minChunk;
+    int? maxChunk;
+    for (final q in sortedQueries) {
+      if (q.length <= 0) {
+        results[q.index] = const [];
+        continue;
+      }
+      minChunk = (minChunk == null) ? q.firstChunk : (q.firstChunk < minChunk ? q.firstChunk : minChunk);
+      maxChunk = (maxChunk == null) ? q.lastChunk : (q.lastChunk > maxChunk ? q.lastChunk : maxChunk);
+    }
+
+    if (minChunk == null || maxChunk == null) return results;
+
+    for (int ci = minChunk; ci <= maxChunk; ci++) {
+      // Add queries that start in this chunk to active list.
+      while (nextQueryIdx < sortedQueries.length && sortedQueries[nextQueryIdx].firstChunk == ci) {
+        final q = sortedQueries[nextQueryIdx];
+        if (q.length > 0) {
+          activeQueries.add(_ActiveQuery(
+            index: q.index,
+            offset: q.offset,
+            length: q.length,
+            buffer: Uint8List(q.length),
+            bytesRead: 0,
+          ));
+        }
+        nextQueryIdx++;
+      }
+
+      if (activeQueries.isEmpty) continue;
+
+      // Decompress the current chunk once.
+      final chunkData = await _decompressChunk(ci);
+
+      // For each active query, copy relevant data from this chunk.
+      for (int i = activeQueries.length - 1; i >= 0; i--) {
+        final aq = activeQueries[i];
+
+        // Position in the uncompressed stream where this chunk starts.
+        final int chunkOffset = ci * _chunkLen;
+        
+        // Calculate where in the chunk we should start reading for this query.
+        // It's either the query's start offset (if this is its first chunk) 
+        // or the start of the chunk.
+        final int startInChunk = (aq.bytesRead == 0) 
+            ? (aq.offset - chunkOffset) 
+            : 0;
+
+        final int remainingInQuery = aq.length - aq.bytesRead;
+        final int availableInChunk = chunkData.length - startInChunk;
+
+        if (availableInChunk <= 0) {
+          // Chunk is shorter than expected or query offset is beyond chunk end.
+          results[aq.index] = aq.buffer.sublist(0, aq.bytesRead);
+          activeQueries.removeAt(i);
+          continue;
+        }
+
+        final int bytesToCopy = remainingInQuery < availableInChunk ? remainingInQuery : availableInChunk;
+
+        aq.buffer.setRange(aq.bytesRead, aq.bytesRead + bytesToCopy, chunkData.sublist(startInChunk, startInChunk + bytesToCopy));
+        aq.bytesRead += bytesToCopy;
+
+        if (aq.bytesRead >= aq.length) {
+          results[aq.index] = aq.buffer;
+          activeQueries.removeAt(i);
+        }
+      }
+    }
+
+    // Handle any queries that didn't finish (e.g. EOF reached before length satisfied).
+    for (final aq in activeQueries) {
+      results[aq.index] = aq.buffer.sublist(0, aq.bytesRead);
+    }
+
+    return results;
+  }
+
+  /// Reads multiple byte ranges and decodes them as UTF-8 strings.
+  Future<List<String>> readBulk(List<(int offset, int length)> queries) async {
+    final byteResults = await readBulkBytes(queries);
+    return byteResults.map((bytes) => utf8.decode(bytes, allowMalformed: true)).toList();
+  }
+
   // ---------------------------------------------------------------------------
   // Header Parsing
   // ---------------------------------------------------------------------------
@@ -239,4 +351,21 @@ class DictzipReader {
     // Raw inflate — no gzip / zlib header, just deflate stream.
     return ZLibDecoder(raw: true).convert(raw);
   }
+}
+
+/// Helper class to track the progress of a bulk read query.
+class _ActiveQuery {
+  final int index;
+  final int offset;
+  final int length;
+  final Uint8List buffer;
+  int bytesRead;
+
+  _ActiveQuery({
+    required this.index,
+    required this.offset,
+    required this.length,
+    required this.buffer,
+    required this.bytesRead,
+  });
 }
