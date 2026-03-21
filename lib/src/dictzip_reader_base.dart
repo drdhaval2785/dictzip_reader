@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'source.dart';
 
 /// Parses and reads from a dictzip (`.dict.dz`) file without fully decompressing it.
 ///
@@ -18,9 +19,8 @@ import 'dart:convert';
 /// await reader.close();
 /// ```
 class DictzipReader {
-  final String path;
-
-  RandomAccessFile? _raf;
+  final String? path;
+  RandomAccessSource? _source;
 
   /// Uncompressed size of each chunk (CHLEN from RA header).
   int _chunkLen = 0;
@@ -36,6 +36,9 @@ class DictzipReader {
 
   bool _opened = false;
 
+  /// Current position in the source during header parsing.
+  int _currentPos = 0;
+
   DictzipReader(this.path);
 
   // ---------------------------------------------------------------------------
@@ -46,15 +49,23 @@ class DictzipReader {
   ///
   /// Must be called before [read].
   Future<void> open() async {
-    _raf = await File(path).open(mode: FileMode.read);
+    if (path == null) throw StateError('Path is null. Use openSource() instead.');
+    _source = FileRandomAccessSource(path!);
+    await _parseHeader();
+    _opened = true;
+  }
+
+  /// Opens the reader with a custom [RandomAccessSource].
+  Future<void> openSource(RandomAccessSource source) async {
+    _source = source;
     await _parseHeader();
     _opened = true;
   }
 
   /// Closes the file.
   Future<void> close() async {
-    await _raf?.close();
-    _raf = null;
+    await _source?.close();
+    _source = null;
     _opened = false;
   }
 
@@ -211,13 +222,16 @@ class DictzipReader {
   ///   if FLG.FHCRC (bit 1): 2-byte CRC
   /// → data starts here
   Future<void> _parseHeader() async {
-    final raf = _raf!;
+    final source = _source!;
+    _currentPos = 0;
 
     // Read the first 10 bytes (fixed gzip header).
-    final header = await raf.read(10);
+    final header = await source.read(_currentPos, 10);
+    _currentPos += 10;
+
     if (header.length < 10) throw FormatException('File too short to be a valid gzip/dictzip file.');
     if (header[0] != 0x1f || header[1] != 0x8b) {
-      throw FormatException('Not a gzip file (bad magic bytes): $path');
+      throw FormatException('Not a gzip file (bad magic bytes): ${path ?? 'source'}');
     }
     // header[2] = CM (8 = deflate) — we don't enforce this to be lenient.
     final flags = header[3];
@@ -229,31 +243,34 @@ class DictzipReader {
 
     // ── FEXTRA ────────────────────────────────────────────────────────────────
     if (flags & flagFEXTRA != 0) {
-      final xlenBytes = await raf.read(2);
+      final xlenBytes = await source.read(_currentPos, 2);
+      _currentPos += 2;
       final xlen = ByteData.sublistView(Uint8List.fromList(xlenBytes)).getUint16(0, Endian.little);
-      final extraBytes = await raf.read(xlen);
+      final extraBytes = await source.read(_currentPos, xlen);
+      _currentPos += xlen;
       _parseExtraField(Uint8List.fromList(extraBytes));
     }
 
     // ── FNAME ─────────────────────────────────────────────────────────────────
     if (flags & flagFNAME != 0) {
-      await _skipNullTerminated(raf);
+      await _skipNullTerminated();
     }
 
     // ── FCOMMENT ──────────────────────────────────────────────────────────────
     if (flags & flagFCOMMENT != 0) {
-      await _skipNullTerminated(raf);
+      await _skipNullTerminated();
     }
 
     // ── FHCRC ─────────────────────────────────────────────────────────────────
     if (flags & flagFHCRC != 0) {
-      await raf.read(2); // skip CRC16
+      await source.read(_currentPos, 2); // skip CRC16
+      _currentPos += 2;
     }
 
-    _dataOffset = await raf.position();
+    _dataOffset = _currentPos;
 
     if (_chunkLen == 0) {
-      throw FormatException('Not a dictzip file: missing RA extra subfield in $path');
+      throw FormatException('Not a dictzip file: missing RA extra subfield in ${path ?? 'source'}');
     }
 
     // Build cumulative file offsets for each chunk.
@@ -306,9 +323,11 @@ class DictzipReader {
   }
 
   /// Skips bytes until a null byte (0x00) is consumed.
-  Future<void> _skipNullTerminated(RandomAccessFile raf) async {
+  Future<void> _skipNullTerminated() async {
+    final source = _source!;
     while (true) {
-      final b = await raf.read(1);
+      final b = await source.read(_currentPos, 1);
+      _currentPos += 1;
       if (b.isEmpty || b[0] == 0) break;
     }
   }
@@ -345,8 +364,7 @@ class DictzipReader {
     final fileOffset  = _chunkFileOffsets[chunkIndex];
     final compressed  = _chunkCompressedSizes[chunkIndex];
 
-    await _raf!.setPosition(fileOffset);
-    final raw = await _raf!.read(compressed);
+    final raw = await _source!.read(fileOffset, compressed);
 
     // Raw inflate — no gzip / zlib header, just deflate stream.
     return ZLibDecoder(raw: true).convert(raw);

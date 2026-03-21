@@ -1,3 +1,8 @@
+## 0.1.2
+
+- Added `RandomAccessSource` abstraction to support non-file sources (like Android SAF).
+- Added `openSource(RandomAccessSource source)` to `DictzipReader`.
+
 ## 0.1.1
 
 - Added `readBulk` and `readBulkBytes` for efficient simultaneous reading of multiple ranges.

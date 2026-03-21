@@ -4,3 +4,4 @@
 library dictzip_reader;
 
 export 'src/dictzip_reader_base.dart';
+export 'src/source.dart';
