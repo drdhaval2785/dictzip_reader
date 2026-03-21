@@ -9,6 +9,9 @@ abstract class RandomAccessSource {
   /// Returns the total size of the data source in bytes.
   Future<int> get length;
 
+  /// Checks and opens the source if necessary.
+  Future<void> open();
+
   /// Releases any system resources (file handles, SAF sessions).
   Future<void> close();
 }
@@ -20,6 +23,11 @@ class FileRandomAccessSource implements RandomAccessSource {
   int? _cachedLength;
 
   FileRandomAccessSource(this.path);
+
+  @override
+  Future<void> open() async {
+    await _ensureOpen();
+  }
 
   Future<void> _ensureOpen() async {
     if (_file == null) {
