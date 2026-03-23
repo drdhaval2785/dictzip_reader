@@ -326,9 +326,15 @@ class DictzipReader {
   Future<void> _skipNullTerminated() async {
     final source = _source!;
     while (true) {
-      final b = await source.read(_currentPos, 1);
-      _currentPos += 1;
-      if (b.isEmpty || b[0] == 0) break;
+      final chunk = await source.read(_currentPos, 64);
+      if (chunk.isEmpty) break;
+      
+      final nullIndex = chunk.indexOf(0);
+      if (nullIndex != -1) {
+        _currentPos += nullIndex + 1;
+        break;
+      }
+      _currentPos += chunk.length;
     }
   }
 
