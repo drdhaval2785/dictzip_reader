@@ -1,3 +1,7 @@
+## 0.1.3
+
+- Added `MemoryRandomAccessSource` to support in-memory reading for smaller files for speed.
+
 ## 0.1.2
 
 - Added `RandomAccessSource` abstraction to support non-file sources (like Android SAF).
