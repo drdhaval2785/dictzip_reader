@@ -10,7 +10,7 @@ abstract class RandomAccessSource {
   Future<int> get length;
 
   /// Checks and opens the source if necessary.
-  Future<void> open();
+  Future<void> open() async {}
 
   /// Releases any system resources (file handles, SAF sessions).
   Future<void> close();
@@ -61,6 +61,7 @@ class FileRandomAccessSource implements RandomAccessSource {
 class MemoryRandomAccessSource implements RandomAccessSource {
   final Uint8List _data;
 
+  /// Creates a [MemoryRandomAccessSource] from the given [data].
   MemoryRandomAccessSource(this._data);
 
   @override

@@ -23,9 +23,25 @@ void main() async {
 }
 ```
 
-### Advanced: Custom Data Sources (SAF, Network, Memory)
+### Built-in Memory Source
 
-To support non-file sources (like Android Storage Access Framework `content://` URIs), implement the `RandomAccessSource` interface.
+For small files that fit in memory, use `MemoryRandomAccessSource` for maximum speed:
+
+```dart
+final fileBytes = await File('test.dict.dz').readAsBytes();
+final source = MemoryRandomAccessSource(fileBytes);
+final reader = DictzipReader(null);
+
+await reader.openSource(source);
+final text = await reader.read(0, 50);
+print(text);
+
+await reader.close();
+```
+
+### Advanced: Custom Data Sources (SAF, Network)
+
+To support other non-file sources (like Android Storage Access Framework `content://` URIs), implement the `RandomAccessSource` interface.
 
 ```dart
 class MyCustomSource implements RandomAccessSource {
@@ -36,6 +52,11 @@ class MyCustomSource implements RandomAccessSource {
 
   @override
   Future<int> get length async => 12345; // total size
+
+  @override
+  Future<void> open() async {
+    // Check and open source if necessary
+  }
 
   @override
   Future<void> close() async {

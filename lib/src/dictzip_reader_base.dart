@@ -13,10 +13,16 @@ import 'source.dart';
 ///
 /// Usage:
 /// ```dart
+/// // Standard file usage
 /// final reader = DictzipReader('/path/to/file.dict.dz');
 /// await reader.open();
 /// final text = await reader.read(offset, length);
 /// await reader.close();
+///
+/// // Memory or custom source usage
+/// final source = MemoryRandomAccessSource(bytes);
+/// final reader = DictzipReader(null);
+/// await reader.openSource(source);
 /// ```
 class DictzipReader {
   final String? path;
@@ -55,7 +61,9 @@ class DictzipReader {
     _opened = true;
   }
 
-  /// Opens the reader with a custom [RandomAccessSource].
+  /// Opens the reader with a custom [RandomAccessSource] (e.g. [MemoryRandomAccessSource]).
+  /// 
+  /// The [source] will be closed automatically when [close] is called.
   Future<void> openSource(RandomAccessSource source) async {
     _source = source;
     await _parseHeader();
