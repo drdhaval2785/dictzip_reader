@@ -13,6 +13,9 @@ class MemoryRandomAccessSource implements RandomAccessSource {
   Future<int> get length async => data.length;
 
   @override
+  Future<void> open() async {}
+
+  @override
   Future<Uint8List> read(int offset, int length) async {
     if (offset >= data.length) return Uint8List(0);
     final end = offset + length > data.length ? data.length : offset + length;

@@ -55,3 +55,28 @@ class FileRandomAccessSource implements RandomAccessSource {
     _file = null;
   }
 }
+
+/// In-memory implementation of [RandomAccessSource] for fast I/O.
+/// Loads data into memory once and serves all reads from memory.
+class MemoryRandomAccessSource implements RandomAccessSource {
+  final Uint8List _data;
+
+  MemoryRandomAccessSource(this._data);
+
+  @override
+  Future<int> get length async => _data.length;
+
+  @override
+  Future<void> open() async {}
+
+  @override
+  Future<Uint8List> read(int offset, int length) async {
+    if (offset >= _data.length) return Uint8List(0);
+    final end =
+        (offset + length > _data.length) ? _data.length : offset + length;
+    return _data.sublist(offset, end);
+  }
+
+  @override
+  Future<void> close() async {}
+}
